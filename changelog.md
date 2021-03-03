@@ -4,3 +4,4 @@
 
 ### 2021-03-03
 - added basic residual block and bottleneck block for conv ops
+- added basic residual block for deconv ops

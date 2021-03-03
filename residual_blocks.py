@@ -32,7 +32,7 @@ class BasicResBlock(tf.keras.layers.Layer):
             kernel_size=kernel_size,
             strides=strides,
             padding=padding,
-            kernel_initializer=orthogonal_initializer)
+            kernel_initializer=orthogonal_initializer(1e-4))
         self.bn1 = tf.keras.layers.BatchNormalization()
         self.act1 = tf.keras.layers.ReLU()
 
@@ -42,7 +42,7 @@ class BasicResBlock(tf.keras.layers.Layer):
             kernel_size=kernel_size,
             padding=padding,
             strides=(1, 1),
-            kernel_initializer=orthogonal_initializer)
+            kernel_initializer=orthogonal_initializer(1e-4))
         self.bn2 = tf.keras.layers.BatchNormalization()
 
         # res conv block
@@ -51,7 +51,7 @@ class BasicResBlock(tf.keras.layers.Layer):
             kernel_size=(1, 1),
             strides=strides,
             padding=padding,
-            kernel_initializer=orthogonal_initializer)
+            kernel_initializer=orthogonal_initializer(1e-4))
         self.res_bn = tf.keras.layers.BatchNormalization()
 
         # final activation
@@ -96,7 +96,7 @@ class ResBottleNeckBlock(tf.keras.layers.Layer):
                          filters=filters,
                          padding=padding,
                          strides=strides,
-                         kernel_initializer=orthogonal_initializer)
+                         kernel_initializer=orthogonal_initializer(1e-4))
         RelU = partial(tf.keras.layers.ReLU)
         BN = partial(tf.keras.layers.BatchNormalization)
 
@@ -142,3 +142,55 @@ class ResBottleNeckBlock(tf.keras.layers.Layer):
         residual = self.res_bn(residual, training=training)
 
         return self.act3(tf.add(x, residual))
+
+
+class ResidualDeconvBlock(tf.keras.layers.Layer):
+    def __init__(self,
+                 filters: int,
+                 kernel_size: Tuple[int] = (3, 3),
+                 padding: str = "same",
+                 strides: Tuple[int] = (2, 2),
+                 *args,
+                 **kwargs):
+        super(ResidualDeconvBlock, self).__init__(*args, **kwargs)
+        self.filters = filters
+        self.kernel_size = kernel_size
+        self.padding = padding
+        self.strides = strides
+
+        Conv2DT = partial(tf.keras.layers.Convolution2DTranspose,
+                          kernel_size=kernel_size,
+                          filters=filters,
+                          padding=padding,
+                          strides=strides,
+                          kernel_initializer=orthogonal_initializer(1e-4))
+        RelU = partial(tf.keras.layers.ReLU)
+        BN = partial(tf.keras.layers.BatchNormalization)
+
+        self.bn1 = BN()
+        self.act1 = RelU()
+        self.deconv1 = Conv2DT()
+
+        self.bn2 = BN()
+        self.act2 = RelU()
+        self.deconv2 = Conv2DT(strides=1)
+
+        self.bn3 = BN()
+        self.act3 = BN()
+        self.deconv3 = Conv2DT()
+
+    def call(self, inputs, **kwargs):
+        training = kwargs.get("training", False)
+        x = self.bn1(inputs, training=training)
+        x = self.act1(x)
+        x = self.deconv1(x)
+
+        x = self.bn2(x, training=training)
+        x = self.act2(x)
+        x = self.deconv2(x)
+
+        residual = self.bn3(x, training=training)
+        residual = self.act3(residual)
+        residual = self.deconv3(residual)
+
+        return tf.add([x, residual])
